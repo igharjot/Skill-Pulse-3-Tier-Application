@@ -4,13 +4,53 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - 'k8s/**'
       - 'docs/**'
       - '**/*.md'
+  pull_request:
+    branches: [main]
 
 jobs:
-  build-and-push:
+  secrets-check:
+    name: Ensure no plaintext K8s Secrets in repo
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+ 
+      - name: Fail if a raw Secret with stringData/data is committed
+        run: |
+          # Look for any file in k8s/ that is kind: Secret (not SealedSecret).
+          # SealedSecrets have kind: SealedSecret — those are fine.
+          FOUND=$(grep -rl '^kind: Secret$' k8s/ 2>/dev/null || true)
+          if [ -n "$FOUND" ]; then
+            echo "ERROR: Plaintext Kubernetes Secret found in:"
+            echo "$FOUND"
+            echo ""
+            echo "Use Sealed Secrets instead (see k8s/05-sealed-secret.yaml)."
+            echo "Run:  make seal   then delete the plain file."
+            exit 1
+          fi
+          echo "OK: No plaintext Secrets found in k8s/"
+ 
+      - name: Validate SealedSecret manifest is present and well-formed
+        run: |
+          if [ ! -f k8s/05-sealed-secret.yaml ]; then
+            echo "ERROR: k8s/05-sealed-secret.yaml is missing."
+            echo "       Run 'make seal' to generate it."
+            exit 1
+          fi
+          KIND=$(grep '^kind:' k8s/05-sealed-secret.yaml | awk '{print $2}')
+          if [ "$KIND" != "SealedSecret" ]; then
+            echo "ERROR: k8s/05-sealed-secret.yaml has kind=$KIND, expected SealedSecret"
+            exit 1
+          fi
+          echo "OK: SealedSecret manifest looks good (kind=$KIND)"
+
+  build-and-push:
+    needs: secrets-check
+    runs-on: ubuntu-latest
+    if: |
+      !contains(github.event.head_commit.modified, 'k8s/') &&
+      !contains(toJson(github.event.head_commit.modified), '.md')
     steps:
       - uses: actions/checkout@v4
 
