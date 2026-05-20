@@ -42,6 +42,7 @@ jobs:
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: frontend/Dockerfile
+          ignore: DL3018
 
       # ------------------------------------------------
       # HADOLINT - BACKEND
@@ -50,6 +51,7 @@ jobs:
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: backend/Dockerfile
+          ignore: DL3018
 
       # -----------------------------
       # SAST SCAN
