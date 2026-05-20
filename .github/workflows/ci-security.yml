@@ -61,14 +61,6 @@ jobs:
         with:
           config: "p/security-audit"
 
-      # ------------------------------------------------
-      # SONARQUBE
-      # ------------------------------------------------
-      - name: SonarQube Scan
-        uses: sonarsource/sonarqube-scan-action@master
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}    
-
       # -----------------------------
       # TRIVY FILESYSTEM SCAN
       # -----------------------------
