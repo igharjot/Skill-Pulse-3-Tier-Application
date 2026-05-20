@@ -1,0 +1,106 @@
+name: Terraform Security Pipeline
+
+on:
+  pull_request:
+    branches:
+      - main
+
+    paths:
+      - 'terraform/**'
+
+  push:
+    branches:
+      - main
+
+    paths:
+      - 'terraform/**'
+
+jobs:
+
+  terraform-security:
+    name: Terraform IaC Security Scans
+
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: terraform/environments/staging
+
+    steps:
+
+      # ------------------------------------------------
+      # CHECKOUT REPOSITORY
+      # ------------------------------------------------
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------
+      # SETUP TERRAFORM
+      # ------------------------------------------------
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      # ------------------------------------------------
+      # TERRAFORM FORMAT CHECK
+      # ------------------------------------------------
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      # ------------------------------------------------
+      # TERRAFORM INIT
+      # ------------------------------------------------
+
+      - name: Terraform Init
+        run: terraform init
+
+      # ------------------------------------------------
+      # TERRAFORM VALIDATE
+      # ------------------------------------------------
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      # ------------------------------------------------
+      # TFSEC SCAN
+      # ------------------------------------------------
+
+      - name: Run tfsec Scan
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: terraform
+
+      # ------------------------------------------------
+      # CHECKOV SCAN
+      # ------------------------------------------------
+
+      - name: Run Checkov Scan
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform
+          framework: terraform
+          quiet: true
+          soft_fail: false
+
+      # ------------------------------------------------
+      # TRIVY IaC SCAN
+      # ------------------------------------------------
+
+      - name: Run Trivy IaC Scan
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          scan-type: config
+          scan-ref: terraform
+          format: table
+          exit-code: 1
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+
+      # ------------------------------------------------
+      # TERRAFORM PLAN
+      # ------------------------------------------------
+
+      - name: Terraform Plan
+        run: terraform plan

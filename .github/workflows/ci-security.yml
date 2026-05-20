@@ -1,0 +1,132 @@
+name: SkillPulse DevSecOps Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+
+  pull_request:
+    branches:
+      - main
+
+env:
+  IMAGE_NAME: skillpulse-app
+
+jobs:
+
+  security-scan:
+    name: SAST + Trivy Security Scan
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------
+      # GITLEAKS
+      # ------------------------------------------------
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ------------------------------------------------
+      # HADOLINT - FRONTEND
+      # ------------------------------------------------
+
+      - name: Run Hadolint Frontend
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: frontend/Dockerfile
+
+      # ------------------------------------------------
+      # HADOLINT - BACKEND
+      # ------------------------------------------------
+      - name: Run Hadolint Backend
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: backend/Dockerfile
+
+      # -----------------------------
+      # SAST SCAN
+      # -----------------------------
+      - name: Run Semgrep SAST Scan
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: "p/security-audit"
+
+      # ------------------------------------------------
+      # SONARQUBE
+      # ------------------------------------------------
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}    
+
+      # -----------------------------
+      # TRIVY FILESYSTEM SCAN
+      # -----------------------------
+      - name: Run Trivy Filesystem Scan
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          format: "table"
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: "CRITICAL,HIGH"
+
+  docker-build:
+    name: Docker Build + Scan
+
+    runs-on: ubuntu-latest
+
+    needs: security-scan
+
+    steps:
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # -----------------------------
+      # DOCKER LOGIN
+      # -----------------------------
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # -----------------------------
+      # BUILD IMAGE
+      # -----------------------------
+
+      - name: Build Docker Image
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest .
+
+      # -----------------------------
+      # TRIVY IMAGE SCAN
+      # -----------------------------
+
+      - name: Run Trivy Image Scan
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          image-ref: "${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest"
+          format: "table"
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: "CRITICAL,HIGH"
+
+      # -----------------------------
+      # PUSH IMAGE
+      # -----------------------------
+
+      - name: Push Docker Image
+        run: |
+          docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
