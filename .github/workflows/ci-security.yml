@@ -81,6 +81,12 @@ jobs:
 
     needs: security-scan
 
+    strategy:
+      matrix:
+        service:
+          - frontend
+          - backend
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
